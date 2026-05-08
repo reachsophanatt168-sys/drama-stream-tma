@@ -3,8 +3,6 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { Play, RefreshCcw, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import WebApp from '@twa-dev/sdk';
-import { triggerHaptic, shareVideo } from './admin/telegram';
 import SkeletonLoader from './admin/SkeletonLoader';
 
 const formatNumber = (num: number) => {
@@ -40,7 +38,9 @@ export default function DramaFeed() {
       setHasMore((data || []).length === 10);
     } catch (err) {
       console.error("Failed to load videos", err);
-      WebApp.showAlert("Failed to load videos. Please check your connection.");
+      import('@twa-dev/sdk').then((module) => {
+        module.default.showAlert("Failed to load videos. Please check your connection.");
+      });
     } finally {
       setIsLoading(false);
     }
@@ -75,7 +75,9 @@ export default function DramaFeed() {
 
   // អនុគមន៍សម្រាប់ពេលចុចប៊ូតុងបង់ប្រាក់
   const handleUnlockPremium = useCallback(async (videoId: string) => {
-    triggerHaptic('heavy');
+    const telegram = await import('./admin/telegram');
+    telegram.triggerHaptic('heavy');
+    const WebApp = (await import('@twa-dev/sdk')).default;
     const userId = WebApp.initDataUnsafe?.user?.id;
 
     if (!userId) {
@@ -99,21 +101,23 @@ export default function DramaFeed() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      WebApp.ready();
-      WebApp.expand();
+      import('@twa-dev/sdk').then((module) => {
+        const WebApp = module.default;
+        WebApp.ready();
+        WebApp.expand();
+        
+        const userId = WebApp.initDataUnsafe?.user?.id;
+        if (userId) {
+          supabase.from('purchases').select('video_id').eq('user_id', userId)
+            .then(({ data }) => {
+              if (data) {
+                setUnlockedVideoIds(new Set(data.map(p => p.video_id)));
+              }
+            });
+        }
+      });
     }
     fetchVideos();
-
-    // ទាញយកវីដេអូដែលអ្នកប្រើប្រាស់បានទិញរួច
-    const userId = WebApp.initDataUnsafe?.user?.id;
-    if (userId) {
-      supabase.from('purchases').select('video_id').eq('user_id', userId)
-        .then(({ data }) => {
-          if (data) {
-            setUnlockedVideoIds(new Set(data.map(p => p.video_id)));
-          }
-        });
-    }
   }, [fetchVideos]);
 
   // Intersection Observer for Performance Autoplay
@@ -175,7 +179,11 @@ export default function DramaFeed() {
       
       {/* Pull to Refresh Button */}
       <button 
-        onClick={() => { triggerHaptic('rigid'); fetchVideos(); }}
+        onClick={async () => { 
+          const { triggerHaptic } = await import('./admin/telegram');
+          triggerHaptic('rigid'); 
+          fetchVideos(); 
+        }}
         className="absolute top-4 right-4 z-50 bg-black/40 p-3 rounded-full backdrop-blur-md text-white"
       >
         <RefreshCcw className="w-5 h-5" />
@@ -213,7 +221,7 @@ export default function DramaFeed() {
                   tapTimeout.current = null;
                   
                   // Telegram Haptic Feedback on Like
-                  triggerHaptic('heavy');
+                  import('./admin/telegram').then(m => m.triggerHaptic('heavy'));
 
                   setHearts((prev) => [
                     ...prev, 
@@ -223,12 +231,14 @@ export default function DramaFeed() {
                   // Persist Like to Supabase
                   const newLikes = (video.likes || 0) + 1;
                   setVideos((prev) => prev.map(v => v.id === video.id ? { ...v, likes: newLikes } : v));
-                  supabase.from('videos').update({ likes: newLikes }).eq('id', video.id).catch(console.error);
+                  supabase.from('videos').update({ likes: newLikes }).eq('id', video.id).then(({ error }) => {
+                    if (error) console.error(error);
+                  });
                 } else {
                   // Single Tap
                   tapTimeout.current = setTimeout(() => {
                     tapTimeout.current = null;
-                    triggerHaptic('light'); // Subtle feedback on play/pause
+                                  import('./admin/telegram').then(m => m.triggerHaptic('light')); // Subtle feedback on play/pause
                     if (videoElement.paused) {
                       videoElement.play();
                       setIsPlaying(true);
@@ -282,7 +292,13 @@ export default function DramaFeed() {
                 <span className="text-2xl">💬</span>
                 <span className="text-xs">45</span>
               </div>
-              <div className="flex flex-col items-center" onClick={() => shareVideo(video.url, video.title)}>
+              <div 
+                className="flex flex-col items-center" 
+                onClick={async () => {
+                  const { shareVideo } = await import('./admin/telegram');
+                  shareVideo(video.url, video.title);
+                }}
+              >
                 <span className="text-2xl">🔗</span>
                 <span className="text-xs">Share</span>
               </div>

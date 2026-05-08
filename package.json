@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "dev": "npm run dev --prefix drama-app",
+    "build": "npm run build --prefix drama-app",
+    "start": "npm run start --prefix drama-app"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",
     "@twa-dev/sdk": "^8.0.2",
